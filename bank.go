@@ -1,14 +1,79 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Transaction struct {
 	Type   string
 	Amount float32
+}
+
+func saveTransaction(transactionType string, transactionAmount float32) {
+	transactionText := fmt.Sprintf(
+		"%s: %.2f\n",
+		transactionType,
+		transactionAmount)
+
+	file, err := os.OpenFile(
+		"transaction.txt",
+		os.O_APPEND|os.O_CREATE|os.O_WRONLY,
+		0644,
+	)
+	if err != nil {
+		fmt.Println("Could not open transaction file:", err)
+		return
+	}
+	defer file.Close()
+
+	_, err = file.WriteString(transactionText)
+	if err != nil {
+		fmt.Println("Could not save transaction:", err)
+	}
+}
+
+func readTransactions() []Transaction {
+	transactions := []Transaction{}
+
+	file, err := os.Open("transaction.txt")
+	if err != nil {
+		if os.IsNotExist(err) {
+			return transactions
+		}
+		fmt.Println("Could not open transaction file:", err)
+		return transactions
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		parts := strings.SplitN(scanner.Text(), ": ", 2)
+		if len(parts) != 2 {
+			fmt.Println("Could not read transaction:", scanner.Text())
+			continue
+		}
+
+		amount, err := strconv.ParseFloat(parts[1], 32)
+		if err != nil {
+			fmt.Println("Could not parse transaction amount:", err)
+			continue
+		}
+
+		transactions = append(transactions, Transaction{
+			Type:   parts[0],
+			Amount: float32(amount),
+		})
+	}
+
+	if err := scanner.Err(); err != nil {
+		fmt.Println("Could not read transactions:", err)
+	}
+
+	return transactions
 }
 
 func saveBalance(balance float32) {
@@ -42,7 +107,6 @@ func readBalance() float32 {
 
 func main() {
 	accountBalance := readBalance()
-	transactions := []Transaction{}
 
 	fmt.Println("Welcome to GO Bank!")
 
@@ -71,10 +135,7 @@ func main() {
 			} else {
 				accountBalance += depositAmount
 				saveBalance(accountBalance)
-				transactions = append(transactions, Transaction{
-					Type:   "Deposit",
-					Amount: depositAmount,
-				})
+				saveTransaction("Deposit", depositAmount)
 				fmt.Printf("Balance updated! New amount: %.2f\n", accountBalance)
 			}
 
@@ -89,10 +150,7 @@ func main() {
 			} else {
 				accountBalance -= withdrawAmount
 				saveBalance(accountBalance)
-				transactions = append(transactions, Transaction{
-					Type:   "Withdrawal",
-					Amount: withdrawAmount,
-				})
+				saveTransaction("Withdrawal", withdrawAmount)
 				fmt.Printf("Balance updated! New amount: %.2f\n", accountBalance)
 			}
 
@@ -101,6 +159,7 @@ func main() {
 			return
 
 		case 5:
+			transactions := readTransactions()
 			if len(transactions) == 0 {
 				fmt.Println("No transactions yet.")
 			} else {
